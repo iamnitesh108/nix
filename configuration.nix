@@ -194,11 +194,11 @@ in
     libxkbcommon
     fontconfig
     freetype
-    xorg.libX11
-    xorg.libXext
-    xorg.libXrender
-    xorg.libXtst
-    xorg.libXi
+    libx11
+    libxext
+    libxrender
+    libxtst
+    libxi
   ];
   environment.systemPackages = with pkgs; [
     #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
