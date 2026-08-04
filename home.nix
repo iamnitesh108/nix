@@ -17,7 +17,7 @@
 
   # The home.packages option allows you to install Nix packages into your
   # environment.
-  home.packages = [
+  home.packages = with pkgs; [
     # # Adds the 'hello' command to your environment. It prints a friendly
     # # "Hello, world!" when run.
     # pkgs.hello
@@ -35,7 +35,8 @@
     #   echo "Hello, ${config.home.username}!"
     # '')
 
-    pkgs.mpv
+    mpv
+    micro
   ];
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
@@ -53,6 +54,16 @@
     # '';
   };
 
+  # xdg.configFile."foot/foot.ini".text = ''
+  #   [main]
+  #   font=JetBrainsMono Nerd Font:size=11
+  # '';
+
+  xdg.configFile."ghostty/config".source = ./config/ghostty/config;
+
+  xdg.configFile."foot".source =
+  config.lib.file.mkOutOfStoreSymlink "/etc/nixos/dotfiles/foot";
+
   # Home Manager can also manage your environment variables through
   # 'home.sessionVariables'. These will be explicitly sourced when using a
   # shell provided by Home Manager. If you don't want to manage your shell
@@ -69,10 +80,8 @@
   #
   #  /etc/profiles/per-user/nitesh/etc/profile.d/hm-session-vars.sh
   #
-   home.sessionVariables = {
-    XCURSOR_THEME = "Adwaita";
-    XCURSOR_SIZE = "24";
-   };
+  # XCURSOR_THEME / XCURSOR_SIZE are set by home.pointerCursor below (single
+  # source of truth), so no separate home.sessionVariables block is needed.
 
   home.pointerCursor = {
     enable = true;
@@ -83,10 +92,17 @@
     size = 24;
   };
 
-    # Atuin configuration
+  # NOTE: shell integration for the tools below is intentionally OFF.
+  # ~/.zshrc is hand-managed (not by home-manager) and already initializes
+  # atuin/zoxide/fzf and defines eza aliases itself, with custom flags
+  # (e.g. `zoxide init --cmd cd`, `atuin init --disable-up-arrow`). Enabling
+  # home-manager's integration here would either be a no-op (it only injects
+  # into a home-manager-managed zsh) or double-bind these tools.
+
+  # Atuin configuration
   programs.atuin = {
     enable = true;
-    enableZshIntegration = true;
+    enableZshIntegration = false;
 
     settings = {
       auto_sync = true;
@@ -96,7 +112,24 @@
       style = "compact";
     };
   };
+  programs.zoxide = {
+    enable = true;
+    enableZshIntegration = false;
+  };
 
+  programs.fzf = {
+    enable = true;
+    enableZshIntegration = false;
+  };
+
+  programs.bat = {
+    enable = true;
+  };
+
+  programs.eza = {
+    enable = true;
+    enableZshIntegration = false;
+  };
   # Let Home Manager install and manage itself.
   # programs.home-manager.enable = true;
 }

@@ -1,0 +1,5 @@
+# ghostty terminal configuration
+# JetBrainsMono Nerd Font provides the glyphs used by eza --icons, powerlevel10k
+# and fzf. The font itself is installed via NixOS fonts.packages.
+font-family = JetBrainsMono Nerd Font
+font-size = 11

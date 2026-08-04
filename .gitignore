@@ -1,0 +1,15 @@
+# Build outputs from `nixos-rebuild build` / `nix build`. These are symlinks
+# into /nix/store — regenerable, machine-specific, never useful in history.
+result
+result-*
+
+# JetBrains project metadata (this directory is opened in IDEA/DataGrip).
+.idea/
+
+# Editor and OS scratch files.
+*.swp
+*~
+.DS_Store
+
+# direnv, if it ever gets used here.
+.direnv/
