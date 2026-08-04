@@ -89,11 +89,18 @@ in
   # Enable the X11 windowing system.
   services.xserver.enable = true;
 
-  # Enable the GNOME Desktop Environment.
+  # GDM is the greeter; the session it launches is niri. The full GNOME
+  # desktop is deliberately NOT enabled — it pulled ~35 binaries into the
+  # system profile for a session that is never logged into.
   services.displayManager.gdm.enable = true;
-  services.desktopManager.gnome.enable = true;
 
   programs.niri.enable = true;
+
+  # These two came free with the GNOME desktop module. They are still needed
+  # without it: gnome-keyring backs libsecret (browser/git credentials), and
+  # dconf is where GTK apps keep their settings.
+  services.gnome.gnome-keyring.enable = true;
+  programs.dconf.enable = true;
 
   # Configure keymap in X11
   services.xserver.xkb = {
@@ -171,9 +178,27 @@ in
   };
   # List packages installed in system profile. To search, run:
   # $ nix search wget
+  # nix-ld supplies an FHS-style loader for downloaded binaries that were not
+  # built for NixOS (language servers, JetBrains remote backends, toolchains
+  # fetched by npm/pip/gradle). The loader alone is not enough — without
+  # libraries listed here there is nothing for those binaries to link against,
+  # which is the failure the datagrip-wrapped comment above describes.
   programs.nix-ld.enable = true;
   programs.nix-ld.libraries = with pkgs; [
-    
+    stdenv.cc.cc.lib
+    zlib
+    openssl
+    curl
+    glib
+    libGL
+    libxkbcommon
+    fontconfig
+    freetype
+    xorg.libX11
+    xorg.libXext
+    xorg.libXrender
+    xorg.libXtst
+    xorg.libXi
   ];
   environment.systemPackages = with pkgs; [
     #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
@@ -316,6 +341,18 @@ in
       size = 10 * 1024; # MiB
     }
   ];
+
+  boot.kernel.sysctl = {
+    # The default of 60 assumes swapping means a disk seek. Here the first
+    # swap tier is zram, so reclaiming anonymous pages is far cheaper than
+    # throwing away page cache. 100 leans into that without the zram-only
+    # advice of 180, which would fill zram and spill to the NVMe sooner.
+    "vm.swappiness" = 100;
+    # Swap readahead is a disk optimisation: it reads neighbouring pages on
+    # the assumption a seek is expensive. zram is already in RAM, so this
+    # only burns CPU decompressing pages nobody asked for.
+    "vm.page-cluster" = 0;
+  };
   # ----------------------------------------
 
   system.stateVersion = "26.05"; # Did you read the comment?
