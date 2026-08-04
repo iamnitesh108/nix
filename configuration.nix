@@ -20,6 +20,22 @@ let
         --set LD_LIBRARY_PATH "/run/current-system/sw/share/nix-ld/lib"
     '';
   };
+
+  # Run IDEA through XWayland rather than JetBrains Runtime's native Wayland backend.
+  # That backend creates a real xdg_toplevel for every tooltip — hovering the git gutter
+  # produced 214 open/close pairs in a minute, which re-tiles the IDE and makes the
+  # noctalia taskbar (which enumerates toplevels) flicker in step. X11 tooltips are
+  # override-redirect, so neither the tiler nor the taskbar ever sees them.
+  # DISPLAY=:0 is already in the session env courtesy of xwayland-satellite.
+  idea-wrapped = pkgs.symlinkJoin {
+    name = "idea-wrapped";
+    paths = [ pkgs.jetbrains.idea ];
+    buildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/idea \
+        --unset WAYLAND_DISPLAY
+    '';
+  };
 in
 {
   imports = [
@@ -270,7 +286,7 @@ in
     wl-clipboard
     xwayland-satellite
     datagrip-wrapped
-    jetbrains.idea
+    idea-wrapped
     gcc
     adwaita-icon-theme
     gnome-themes-extra
