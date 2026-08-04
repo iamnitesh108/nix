@@ -10,6 +10,15 @@
 }:
 
 let
+  # DataGrip 2026.2 renders parts of its UI through Skia (skiko). The bundled
+  # libskiko-linux-x64.so links against libGL.so.1 but its RUNPATH still points at
+  # the upstream build directory (/build/DataGrip-*/plugins/remote-dev-server/...),
+  # so the loader never finds libGL. skiko then fails to load and every Skia-backed
+  # component throws UnsatisfiedLinkError — the window paints but nothing responds
+  # to input. Putting libGL on LD_LIBRARY_PATH is what makes the IDE usable.
+  #
+  # --prefix, not --set: --set clobbers the variable, and the empty nix-ld
+  # directory it previously pointed at contains no libGL at all.
   datagrip-wrapped = pkgs.symlinkJoin {
     name = "datagrip-wrapped";
     paths = [ pkgs.jetbrains.datagrip ];
@@ -17,7 +26,7 @@ let
     postBuild = ''
       wrapProgram $out/bin/datagrip \
         --unset WAYLAND_DISPLAY \
-        --set LD_LIBRARY_PATH "/run/current-system/sw/share/nix-ld/lib"
+        --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [ pkgs.libGL ]}"
     '';
   };
 
@@ -46,6 +55,20 @@ in
   # Bootloader.
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+  # Keep the vfat /boot partition from filling up with old generations.
+  boot.loader.systemd-boot.configurationLimit = 10;
+
+  # --- Hardware, firmware & Bluetooth ---
+  # Ship redistributable firmware blobs (Wi-Fi/GPU) and, via the hardware scan's
+  # mkDefault, enable AMD CPU microcode updates.
+  hardware.enableRedistributableFirmware = true;
+
+  # This machine has a Bluetooth adapter (hci0); enable the stack (GNOME provides the UI).
+  hardware.bluetooth.enable = true;
+  hardware.bluetooth.powerOnBoot = true;
+
+  # Firmware updates over LVFS (BIOS/SSD/dock): `fwupdmgr refresh && fwupdmgr update`.
+  services.fwupd.enable = true;
 
   networking.hostName = "nixos"; # Define your hostname.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
@@ -136,124 +159,21 @@ in
       "root"
       "nitesh"
     ]; # <-- Add your username here
+    # Deduplicate the store by hard-linking identical files.
+    auto-optimise-store = true;
+  };
+
+  # Reclaim disk automatically: collect garbage weekly, keeping 30 days of history.
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 30d";
   };
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   programs.nix-ld.enable = true;
   programs.nix-ld.libraries = with pkgs; [
-    SDL
-    SDL2
-    SDL2_image
-    SDL2_mixer
-    SDL2_ttf
-    SDL_image
-    SDL_mixer
-    SDL_ttf
-    alsa-lib
-    at-spi2-atk
-    at-spi2-core
-    atk
-    bzip2
-    cairo
-    cups
-    curlWithGnuTls
-    dbus
-    dbus-glib
-    desktop-file-utils
-    e2fsprogs
-    expat
-    flac
-    fontconfig
-    freeglut
-    freetype
-    fribidi
-    fuse
-    fuse3
-    gdk-pixbuf
-    glew_1_10
-    glib
-    gmp
-    gst_all_1.gst-plugins-base
-    gst_all_1.gst-plugins-ugly
-    gst_all_1.gstreamer
-    gtk2
-    harfbuzz
-    icu
-    keyutils.lib
-    libGL
-    libGLU
-    libappindicator-gtk2
-    libcaca
-    libcanberra
-    libcap
-    libclang.lib
-    libdbusmenu
-    libdrm
-    libgcrypt
-    libgpg-error
-    libidn
-    libjack2
-    libjpeg
-    libmikmod
-    libogg
-    libpng12
-    libpulseaudio
-    librsvg
-    libsamplerate
-    libthai
-    libtheora
-    libtiff
-    libudev0-shim
-    libusb1
-    libuuid
-    libvdpau
-    libvorbis
-    libvpx
-    libxcrypt-legacy
-    libxkbcommon
-    libxml2
-    mesa
-    nspr
-    nss
-    openssl
-    p11-kit
-    pango
-    pixman
-    python3
-    speex
-    stdenv.cc.cc
-    tbb
-    udev
-    vulkan-loader
-    wayland
-    libice
-    libsm
-    libx11
-    libxscrnsaver
-    libxcomposite
-    libxcursor
-    libxdamage
-    libxext
-    libxfixes
-    libxft
-    libxi
-    libxinerama
-    libxmu
-    libxrandr
-    libxrender
-    libxt
-    libxtst
-    libxxf86vm
-    libpciaccess
-    libxcb
-    libxcb-util
-    libxcb-image
-    libxcb-keysyms
-    libxcb-render-util
-    libxcb-wm
-    xkeyboard-config
-    xz
-    zlib
+    
   ];
   environment.systemPackages = with pkgs; [
     #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
@@ -275,35 +195,52 @@ in
     unzip
     ripgrep
     fd
-    eza
     jq
-    bat
-    fzf
     xdg-utils
     xdg-user-dirs
     libsecret
     xwayland
     wl-clipboard
+    wl-clip-persist
+    cliphist
     xwayland-satellite
-    datagrip-wrapped
     idea-wrapped
+    datagrip-wrapped
     gcc
     adwaita-icon-theme
     gnome-themes-extra
-    gparted-full
-    atuin
-    zoxide
+    # gparted-full
+    vscode
+    mesa-demos
+    podman-desktop
   ];
 
-  environment.variables = {
-    XCURSOR_THEME = "Adwaita";
-    XCURSOR_SIZE = "24";
-  };
+  # A Nerd Font is required for the icons/glyphs used by eza --icons, powerlevel10k
+  # and fzf in the shell config; plus general text and emoji coverage.
+  #
+  # `nerd-fonts.symbols-only` provides the "Symbols Nerd Font" family, which
+  # contains ONLY the Nerd-Font glyph range. fontconfig uses it as a system-wide
+  # fallback for those codepoints, so apps that don't use a Nerd Font as their main
+  # font (noctalia, Brave, GTK apps, …) still render Nerd icons instead of tofu.
+  # (JetBrainsMono Nerd Font alone only fixes apps that explicitly select it, e.g.
+  # the terminal.)
+  fonts.packages = with pkgs; [
+    nerd-fonts.jetbrains-mono
+    nerd-fonts.symbols-only
+    noto-fonts
+    noto-fonts-color-emoji
+  ];
+
   xdg.portal.enable = true;
   xdg.portal.extraPortals = with pkgs; [
     xdg-desktop-portal-gtk
   ];
   services.flatpak.enable = true;
+
+  virtualisation.podman = {
+    enable = true;
+    dockerCompat = true; # Optional: provides a `docker` command
+  };
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.
   # programs.mtr.enable = true;
@@ -353,6 +290,33 @@ in
     recommendedServices.enable = true;
     systemd.enable = true;
   };
+
+  # --- System maintenance & reliability ---
+  # Periodic TRIM for the NVMe SSD.
+  services.fstrim.enable = true;
+
+  # Scrub the btrfs volumes to detect (and, with redundancy, repair) bit rot.
+  services.btrfs.autoScrub = {
+    enable = true;
+    interval = "weekly";
+  };
+
+  # Compressed RAM swap: fast, low-latency relief under memory pressure.
+  # The kernel gives this the higher priority, so it is used first.
+  zramSwap.enable = true;
+
+  # Disk-backed swap for real overflow capacity once zram is exhausted. On
+  # btrfs the swapfile must be NoCoW and uncompressed; the NixOS swap module
+  # handles that for us via `btrfs filesystem mkswapfile`.
+  # Note: at 10 GiB this is smaller than RAM (14 GiB), so it is not sized for
+  # hibernation — which is not configured on this host anyway.
+  swapDevices = [
+    {
+      device = "/swapfile";
+      size = 10 * 1024; # MiB
+    }
+  ];
+  # ----------------------------------------
 
   system.stateVersion = "26.05"; # Did you read the comment?
 
