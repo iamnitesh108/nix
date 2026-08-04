@@ -47,11 +47,20 @@
     # # symlink to the Nix store copy.
     # ".screenrc".source = dotfiles/screenrc;
 
-    # # You can also set the file content immediately.
-    # ".gradle/gradle.properties".text = ''
-    #   org.gradle.console=verbose
-    #   org.gradle.daemon.idletimeout=3600000
-    # '';
+    # Gradle daemons are the largest memory consumer on this machine after the
+    # IDE, and they outlive the builds that spawned them — several idle daemons
+    # holding ~2 GiB between them is normal without this. Cap the heap and let
+    # idle daemons exit after 30 minutes.
+    #
+    # WARNING: home-manager renders this into /nix/store, which is world
+    # readable. ~/.gradle/gradle.properties is also the conventional place for
+    # artifactUsername/artifactPassword — never put credentials in this block.
+    # Keep those in a hand-managed file or the environment.
+    ".gradle/gradle.properties".text = ''
+      org.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=512m
+      org.gradle.daemon.idletimeout=1800000
+      org.gradle.console=verbose
+    '';
   };
 
   # xdg.configFile."foot/foot.ini".text = ''
