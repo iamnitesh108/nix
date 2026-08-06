@@ -2,14 +2,15 @@
   description = "NixOS configuration";
 
   inputs = {
-	nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-	home-manager = {
-	    url = "github:nix-community/home-manager/release-26.05";
-	    inputs.nixpkgs.follows = "nixpkgs";
-	};
+    home-manager = {
+      url = "github:nix-community/home-manager/release-26.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
-	noctalia.url = "github:noctalia-dev/noctalia/cachix";
+    noctalia.url = "github:noctalia-dev/noctalia/cachix";
   };
 
   nixConfig = {
@@ -22,28 +23,36 @@
     ];
   };
 
-  outputs = { nixpkgs, home-manager, noctalia, ... }: {
-    nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
+  outputs = { nixpkgs, unstable, home-manager, noctalia, ... }:
+    let
       system = "x86_64-linux";
 
-      specialArgs = {
-        inherit noctalia;
+      pkgs-unstable = import unstable {
+        inherit system;
+        config.allowUnfree = true;
       };
+    in {
+      nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
+        inherit system;
 
-      modules = [
-	  ./configuration.nix
+        specialArgs = {
+          inherit noctalia pkgs-unstable;
+        };
 
-	  home-manager.nixosModules.home-manager
+        modules = [
+          ./configuration.nix
 
-	  {
-	    home-manager.useGlobalPkgs = true;
-	    home-manager.useUserPackages = true;
+          home-manager.nixosModules.home-manager
 
-	    home-manager.users.nitesh = import ./home.nix;
-	  }
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.useUserPackages = true;
 
-	  noctalia.nixosModules.default
-	];
+            home-manager.users.nitesh = import ./home.nix;
+          }
+
+          noctalia.nixosModules.default
+        ];
+      };
     };
-  };
 }
